@@ -1,0 +1,145 @@
+version: '3.8'
+
+services:
+
+  # В реальной разработке, конечно, лучше было бы использовать отдельный шаг в CI/CD для билда.
+  # В рамках учебного проекта объединим деплой и сборку при выполнении docker compose up.
+
+  postgresql:
+    build: ./infra/postgresql
+    container_name: postgresql
+    environment:
+      # Пароль от root
+      POSTGRES_PASSWORD: ${POSTGRESQL_ROOT_PASSWORD}
+      
+      POSTGRESQL_APP_USER: ${POSTGRESQL_APP_USER}
+      POSTGRESQL_APP_PASSWORD: ${POSTGRESQL_APP_PASSWORD}
+      POSTGRESQL_APP_DB: ${POSTGRESQL_APP_DB}
+      POSTGRESQL_APP_SCHEMA: ${POSTGRESQL_APP_SCHEMA}
+    ports:
+      # Для просмотра данных с хоста
+      - "5432:5432"
+    volumes:
+      - postgresql_data:/var/lib/postgres/data
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mysql:
+    build: ./infra/mysql
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_APP_USER: ${MYSQL_APP_USER}
+      MYSQL_APP_PASSWORD: ${MYSQL_APP_PASSWORD}
+      MYSQL_APP_DB: ${MYSQL_DATABASE}
+    ports:
+      # Для просмотра данных с хоста
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  # zookeeper:
+  #   build: ./infra/zookeeper
+  #   container_name: zookeeper
+  #   environment:
+  #     ZOOKEEPER_CLIENT_PORT: '2181'
+  #   ports:
+  #     - "2181:2181"
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '0.5'
+  #         memory: 512M
+
+  # kafka:
+  #   build: ./infra/kafka
+  #   hostname: kafka
+  #   container_name: kafka
+  #   depends_on:
+  #     - zookeeper
+  #   ports:
+  #     - "9092:9092"
+  #   environment:
+  #     # kafka:29092 для _internal_ коннектов
+  #     KAFKA_BROKER_ID: ${KAFKA_BROKER_ID}
+  #     KAFKA_ZOOKEEPER_CONNECT: ${KAFKA_ZOOKEEPER_CONNECT}
+  #     KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: ${KAFKA_LISTENER_SECURITY_PROTOCOL_MAP}
+  #     KAFKA_ADVERTISED_LISTENERS: ${KAFKA_ADVERTISED_LISTENERS}
+  #     KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: ${KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR}
+  #     KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: ${KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS}
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '0.5'
+  #         memory: 512M
+
+  # spark:
+  #   build: ./infra/spark
+  #   container_name: spark
+  #   ports:
+  #     - "8080:8080"
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '0.5'
+  #         memory: 512M
+
+  # airflow:
+  #   build: ./infra/airflow
+  #   depends_on:
+  #     - postgres
+  #     - mysql
+  #   environment:
+  #     AIRFLOW__CORE__EXECUTOR: LocalExecutor
+  #     AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRESQL_APP_USER}:${POSTGRESQL_APP_PASSWORD}@postgres:5432/${POSTGRESQL_APP_DB}
+  #     AIRFLOW__CORE__LOAD_EXAMPLES: 'False'
+  #   volumes:
+  #    - airflow_dags:/opt/airflow/dags
+  #   ports:
+  #     - "8081:8080"
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '0.5'
+  #         memory: 512M   
+
+  data_generator:
+    build: ./code/datagen
+    container_name: datagen
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    environment:
+      POSTGRESQL_APP_USER: ${POSTGRESQL_APP_USER}
+      POSTGRESQL_APP_PASSWORD: ${POSTGRESQL_APP_PASSWORD}
+      POSTGRESQL_APP_HOST: ${POSTGRESQL_APP_HOST}
+      POSTGRESQL_APP_DB: ${POSTGRESQL_APP_DB}
+      POSTGRESQL_APP_SCHEMA: ${POSTGRESQL_APP_SCHEMA}
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+volumes:
+  postgresql_data:
+  mysql_data:
+  airflow_dags:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./code/airflow/dags

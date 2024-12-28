@@ -1,0 +1,5 @@
+faker==19.13.0
+faker-commerce==1.0.4
+psycopg2-binary==2.9.10
+psycopg2-pool==1.2
+rich==13.9.4
