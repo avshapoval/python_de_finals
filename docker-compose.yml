@@ -35,18 +35,18 @@ services:
       # Для просмотра данных с localhost
       - "5432:5432"
     volumes:
-      - postgresql_data:/var/lib/postgres/data
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
+      - postgresql-data:/var/lib/postgres/data
     healthcheck:
       # condition, на основе которого проверяем готовность СУБД
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
 
   mysql:
     build: ./infra/db/mysql
@@ -59,18 +59,18 @@ services:
       # Для просмотра данных с localhost
       - "3306:3306"
     volumes:
-      - mysql_data:/var/lib/mysql
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
+      - mysql-data:/var/lib/mysql
     healthcheck:
       # condition, на основе которого проверяем готовность СУБД
       test: ["CMD-SHELL", "mysqladmin ping -h localhost"]
       interval: 5s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
 
   # # ZK & Kafka
   # zookeeper:
@@ -120,17 +120,56 @@ services:
   #     timeout: 5s
   #     retries: 5
 
-  # # SPARK
-  # spark:
-  #   build: ./infra/spark
-  #   container_name: spark
-  #   ports:
-  #     - "8080:8080"
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         cpus: '0.5'
-  #         memory: 512M
+  # SPARK
+  spark-master:
+    image: bitnami/spark:3.5.3
+    container_name: spark-master
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+      - SPARK_MASTER_WEBUI_PORT=8081
+    ports:
+      - "8081:8081"
+      - "7077:7077"
+    volumes:
+      - spark-data:/bitnami
+#      - spark-apps:/opt/spark-apps
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080" ]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  spark-worker:
+    image: bitnami/spark:3.5.3
+    container_name: spark-worker
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=500M
+      - SPARK_WORKER_CORES=1
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    volumes:
+      - spark-data:/bitnami
+#      - spark-apps:/opt/spark-apps
+    depends_on:
+      - spark-master
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
 
   # Datagen
   pg_datagen:
@@ -168,11 +207,13 @@ services:
       #   condition: service_healthy
       pg_datagen:
         condition: service_completed_successfully
+      spark-master:
+        condition: service_healthy
     environment:
       <<: [*airflow-common-env, *pg-connect, *mysql-connect]
     volumes:
     - ./code/airflow/dags:/opt/airflow/dags
-    - sqlite_airflow_data:/usr/local/airflow/db:rw
+    - sqlite-airflow-data:/usr/local/airflow/db:rw
     deploy:
       resources:
         limits:
@@ -190,7 +231,7 @@ services:
         condition: service_completed_successfully
     volumes:
     - ./code/airflow/dags:/opt/airflow/dags
-    - sqlite_airflow_data:/usr/local/airflow/db:rw
+    - sqlite-airflow-data:/usr/local/airflow/db:rw
     deploy:
       resources:
         limits:
@@ -203,14 +244,14 @@ services:
     environment:
       <<: *airflow-common-env
     ports:
-      - "8081:8080"
+      - "8080:8080"
     restart: always
     depends_on:
       airflow-init:
         condition: service_completed_successfully
     volumes:
     - ./code/airflow/dags:/opt/airflow/dags
-    - sqlite_airflow_data:/usr/local/airflow/db:rw
+    - sqlite-airflow-data:/usr/local/airflow/db:rw
     deploy:
       resources:
         limits:
@@ -218,6 +259,7 @@ services:
           memory: 512M
 
 volumes:
-  postgresql_data:
-  mysql_data:
-  sqlite_airflow_data:
+  postgresql-data:
+  mysql-data:
+  sqlite-airflow-data:
+  spark-data:

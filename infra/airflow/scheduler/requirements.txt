@@ -1,0 +1,3 @@
+grpcio-status>=1.59.0
+pyspark==3.5.3
+apache-airflow-providers-apache-spark==4.11.3

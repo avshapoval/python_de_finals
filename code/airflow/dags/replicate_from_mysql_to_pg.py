@@ -1,51 +1,27 @@
 from airflow import DAG
-from airflow.operators.python import PythonOperator, BranchPythonOperator
-from airflow.operators.bash import BashOperator
-from datetime import datetime
-from random import randint
+from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
+from datetime import datetime, timedelta
 
-def _choose_best_model(ti):
-  accuracies = ti.xcom_pull(task_ids=[
-    'training_model_A',
-    'training_model_B',
-    'training_model_C'
-  ])
-  if max(accuracies) > 8:
-    return 'is_accurate'
-  return 'is_inaccurate'
+default_args = {
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'start_date': datetime(2023, 1, 1),
+    'email_on_failure': False,
+    'email_on_retry': False,
+    'retries': 1,
+    'retry_delay': timedelta(minutes=5),
+}
 
-def _training_model(model):
-  print(model)
-  return randint(1, 10)
+dag = DAG(
+    'replicate_from_pg_to_mysql',
+    default_args=default_args,
+    description='Replicate data from PostgreSQL to MySQL using Spark',
+    schedule_interval=timedelta(days=1),
+)
 
-with DAG("my_dag",
-  start_date=datetime(2023, 1 ,1), 
-  schedule_interval='@daily', 
-  catchup=False):
-
-  training_model_tasks = [
-    PythonOperator(
-      task_id=f"training_model_{model_id}",
-      python_callable=_training_model,
-      op_kwargs={
-        "model": model_id
-      }
-    ) for model_id in ['A', 'B', 'C']
-  ]
-
-  choose_best_model = BranchPythonOperator(
-    task_id="choose_best_model",
-    python_callable=_choose_best_model
-  )
-
-  accurate = BashOperator(
-    task_id="is_accurate",
-    bash_command="echo 'accurate'"
-  )
-
-  inaccurate = BashOperator(
-    task_id="is_inaccurate",
-    bash_command=" echo 'inaccurate'"
-  )
-
-  training_model_tasks >> choose_best_model >> [is_accurate, is_inaccurate]
+replicate_task = SparkSubmitOperator(
+    task_id='replicate_data',
+    application='/usr/local/airflow/scripts/replicate_from_pg_to_mysql.py',
+    conn_id='spark_default',
+    dag=dag,
+)

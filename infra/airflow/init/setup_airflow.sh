@@ -20,7 +20,7 @@ airflow connections add \
     --conn-password "$POSTGRESQL_APP_PASSWORD" \
     --conn-schema "$POSTGRESQL_APP_DB" \
     --conn-port '5432' \
-    'python_de_finals_postges'
+    'python_de_finals_postgresql'
 
 airflow connections add \
     --conn-type 'mysql' \

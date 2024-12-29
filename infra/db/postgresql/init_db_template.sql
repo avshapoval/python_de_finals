@@ -24,6 +24,13 @@ CREATE TABLE IF NOT EXISTS users (
     loyalty_status VARCHAR(20)
 );
 
+-- Категории товаров
+CREATE TABLE IF NOT EXISTS product_categories (
+    category_id SERIAL PRIMARY KEY,
+    name VARCHAR(200),
+    parent_category_id INT
+);
+
 -- Товары
 CREATE TABLE IF NOT EXISTS products (
     product_id SERIAL PRIMARY KEY,
@@ -32,7 +39,8 @@ CREATE TABLE IF NOT EXISTS products (
     category_id INT,
     price DECIMAL(10, 2),
     stock_quantity INT,
-    creation_date TIMESTAMP
+    creation_date TIMESTAMP,
+    FOREIGN KEY (category_id) REFERENCES product_categories(category_id)
 );
 
 -- Заказы
@@ -42,7 +50,8 @@ CREATE TABLE IF NOT EXISTS orders (
     order_date TIMESTAMP,
     total_amount DECIMAL(10, 2),
     status VARCHAR(20),
-    delivery_date TIMESTAMP
+    delivery_date TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
 
 -- Детали заказов
@@ -53,11 +62,6 @@ CREATE TABLE IF NOT EXISTS order_details (
     quantity INT,
     price_per_unit DECIMAL(10, 2),
     total_price DECIMAL(10, 2)
-);
-
--- Категории товаров
-CREATE TABLE IF NOT EXISTS product_categories (
-    category_id SERIAL PRIMARY KEY,
-    name VARCHAR(200),
-    parent_category_id INT
+    FOREIGN KEY (order_id) REFERENCES orders(order_id),
+    FOREIGN KEY (product_id) REFERENCES products(product_id)
 );
