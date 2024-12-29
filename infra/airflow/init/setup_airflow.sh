@@ -24,11 +24,15 @@ airflow connections add \
 
 airflow connections add \
     --conn-type 'mysql' \
-    --conn-host "$MYSQL_HOST" \
+    --conn-host "$MYSQL_APP_HOST" \
     --conn-login "$MYSQL_APP_USER" \
     --conn-password "$MYSQL_APP_PASSWORD" \
     --conn-schema "$MYSQL_DATABASE" \
     --conn-port '3306' \
     'python_de_finals_mysql'
+
+airflow connections add \
+    --conn-uri "$SPARK_MASTER_URL?deploy-mode=client&spark_binary=spark3-submit" \
+    'python_de_finals_spark'
 
 airflow version

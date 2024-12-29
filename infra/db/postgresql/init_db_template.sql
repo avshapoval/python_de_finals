@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS order_details (
     product_id INT,
     quantity INT,
     price_per_unit DECIMAL(10, 2),
-    total_price DECIMAL(10, 2)
+    total_price DECIMAL(10, 2),
     FOREIGN KEY (order_id) REFERENCES orders(order_id),
     FOREIGN KEY (product_id) REFERENCES products(product_id)
 );

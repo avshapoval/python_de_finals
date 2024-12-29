@@ -1,4 +1,5 @@
 version: '3.8'
+name: python-finals-de
 
 x-postgresql-connection-env: &pg-connect
   POSTGRESQL_APP_HOST: ${POSTGRESQL_APP_HOST}
@@ -14,13 +15,19 @@ x-mysql-connection-env: &mysql-connect
   MYSQL_APP_PASSWORD: ${MYSQL_APP_PASSWORD}
 
 x-airflow-common-env: &airflow-common-env
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////usr/local/airflow/db/airflow.db
-    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
-    AIRFLOW_UID: ${AIRFLOW_UID}
-    _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME}
-    _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD}
+  AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}
+  AIRFLOW__CORE__LOAD_EXAMPLES: ${AIRFLOW__CORE__LOAD_EXAMPLES}
+  AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: ${AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK}
+  AIRFLOW_UID: ${AIRFLOW_UID}
+  _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME}
+  _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD}
+  SPARK_MASTER_URL: ${SPARK_MASTER_URL}
 
+x-spark-common-env: &spark-common-env
+  SPARK_RPC_AUTHENTICATION_ENABLED: ${SPARK_RPC_AUTHENTICATION_ENABLED}
+  SPARK_RPC_ENCRYPTION_ENABLED: ${SPARK_RPC_ENCRYPTION_ENABLED}
+  SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: ${SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED}
+  SPARK_SSL_ENABLED: ${SPARK_SSL_ENABLED}
 
 services:
   # RDBMS
@@ -28,7 +35,7 @@ services:
     build: ./infra/db/postgresql
     container_name: postgresql
     environment:
-      << : *pg-connect
+      <<: *pg-connect
       # Пароль от root
       POSTGRES_PASSWORD: ${POSTGRESQL_ROOT_PASSWORD}
     ports:
@@ -120,17 +127,14 @@ services:
   #     timeout: 5s
   #     retries: 5
 
-  # SPARK
+  # Spark
   spark-master:
-    image: bitnami/spark:3.5.3
+    build: ./infra/spark/spark-master
     container_name: spark-master
     environment:
-      - SPARK_MODE=master
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
-      - SPARK_MASTER_WEBUI_PORT=8081
+      <<: *spark-common-env
+      SPARK_MODE: master
+      SPARK_MASTER_WEBUI_PORT: 8081
     ports:
       - "8081:8081"
       - "7077:7077"
@@ -138,10 +142,10 @@ services:
       - spark-data:/bitnami
 #      - spark-apps:/opt/spark-apps
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8080" ]
-      interval: 5s
-      timeout: 3s
-      retries: 3
+      test: ["CMD-SHELL", "curl -f http://localhost:8081"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     deploy:
       resources:
         limits:
@@ -149,22 +153,20 @@ services:
           memory: 512M
 
   spark-worker:
-    image: bitnami/spark:3.5.3
+    build: ./infra/spark/spark-worker
     container_name: spark-worker
     environment:
-      - SPARK_MODE=worker
-      - SPARK_MASTER_URL=spark://spark-master:7077
-      - SPARK_WORKER_MEMORY=500M
-      - SPARK_WORKER_CORES=1
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
+      <<: *spark-common-env
+      SPARK_MODE: worker
+      SPARK_MASTER_URL: ${SPARK_MASTER_URL}
+      SPARK_WORKER_MEMORY: 500M
+      SPARK_WORKER_CORES: 1
     volumes:
       - spark-data:/bitnami
 #      - spark-apps:/opt/spark-apps
     depends_on:
-      - spark-master
+      spark-master:
+        condition: service_healthy
     deploy:
       resources:
         limits:
