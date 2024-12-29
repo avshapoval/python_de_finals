@@ -1,4 +1,4 @@
-name: python-finals-de
+name: python-de-finals-avshapoval
 
 x-postgresql-connection-env: &pg-connect
   POSTGRESQL_APP_HOST: ${POSTGRESQL_APP_HOST}
