@@ -1,6 +1,5 @@
 version: '3.8'
 
-
 x-postgresql-connection-env: &pg-connect
   POSTGRESQL_APP_HOST: ${POSTGRESQL_APP_HOST}
   POSTGRESQL_APP_DB: ${POSTGRESQL_APP_DB}
@@ -24,7 +23,137 @@ x-airflow-common-env: &airflow-common-env
 
 
 services:
+  # RDBMS
+  postgresql:
+    build: ./infra/db/postgresql
+    container_name: postgresql
+    environment:
+      << : *pg-connect
+      # Пароль от root
+      POSTGRES_PASSWORD: ${POSTGRESQL_ROOT_PASSWORD}
+    ports:
+      # Для просмотра данных с localhost
+      - "5432:5432"
+    volumes:
+      - postgresql_data:/var/lib/postgres/data
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      # condition, на основе которого проверяем готовность СУБД
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
+  mysql:
+    build: ./infra/db/mysql
+    container_name: mysql
+    environment:
+      <<: *mysql-connect
+      # Пароль от root
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    ports:
+      # Для просмотра данных с localhost
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      # condition, на основе которого проверяем готовность СУБД
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # # ZK & Kafka
+  # zookeeper:
+  #   build: ./infra/messaging/zookeeper
+  #   container_name: zookeeper
+  #   environment:
+  #     ZOOKEEPER_CLIENT_PORT: '2181'
+  #   ports:
+  #     - "2181:2181"
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '0.5'
+  #         memory: 512M
+  #     # condition, на основе которого проверяем готовность ZK
+  #     test: ["CMD", "echo", "ruok", "|", "nc", "localhost", "2181"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
+
+  # kafka:
+  #   build: ./infra/messaging/kafka
+  #   hostname: kafka
+  #   container_name: kafka
+  #   depends_on:
+  #     zookeper:
+  #       condition: service_healthy
+  #   ports:
+  #     - "9092:9092"
+  #   environment:
+  #     # kafka:29092 для _internal_ коннектов
+  #     KAFKA_BROKER_ID: ${KAFKA_BROKER_ID}
+  #     KAFKA_ZOOKEEPER_CONNECT: ${KAFKA_ZOOKEEPER_CONNECT}
+  #     KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: ${KAFKA_LISTENER_SECURITY_PROTOCOL_MAP}
+  #     KAFKA_ADVERTISED_LISTENERS: ${KAFKA_ADVERTISED_LISTENERS}
+  #     KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: ${KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR}
+  #     KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: ${KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS}
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '0.5'
+  #         memory: 512M
+  #   healthcheck:
+  #     # condition, на основе которого проверяем готовность Kafka
+  #     test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
+
+  # # SPARK
+  # spark:
+  #   build: ./infra/spark
+  #   container_name: spark
+  #   ports:
+  #     - "8080:8080"
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '0.5'
+  #         memory: 512M
+
+  # Datagen
+  pg_datagen:
+    build: ./code/datagen/pg_datagen
+    container_name: pg-datagen
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    environment:
+      << : *pg-connect
+      # Параметры генерации
+      PG_DATAGEN_NUM_USERS: ${PG_DATAGEN_NUM_USERS}
+      PG_DATAGEN_NUM_PRODUCTS: ${PG_DATAGEN_NUM_PRODUCTS}
+      PG_DATAGEN_NUM_ORDERS: ${PG_DATAGEN_NUM_ORDERS}
+      PG_DATAGEN_NUM_ORDER_DETAILS: ${PG_DATAGEN_NUM_ORDER_DETAILS}
+      PG_DATAGEN_NUM_CATEGORIES: ${PG_DATAGEN_NUM_CATEGORIES}
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  # Airflow
   airflow-init:
     build: ./infra/airflow/init
     container_name: airflow-init
@@ -82,133 +211,6 @@ services:
     volumes:
     - ./code/airflow/dags:/opt/airflow/dags
     - sqlite_airflow_data:/usr/local/airflow/db:rw
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
-
-
-  postgresql:
-    build: ./infra/db/postgresql
-    container_name: postgresql
-    environment:
-      << : *pg-connect
-      # Пароль от root
-      POSTGRES_PASSWORD: ${POSTGRESQL_ROOT_PASSWORD}
-    ports:
-      # Для просмотра данных с localhost
-      - "5432:5432"
-    volumes:
-      - postgresql_data:/var/lib/postgres/data
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
-    healthcheck:
-      # condition, на основе которого проверяем готовность СУБД
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  mysql:
-    build: ./infra/db/mysql
-    container_name: mysql
-    environment:
-      <<: *mysql-connect
-      # Пароль от root
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-    ports:
-      # Для просмотра данных с localhost
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
-    healthcheck:
-      # condition, на основе которого проверяем готовность СУБД
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  # zookeeper:
-  #   build: ./infra/messaging/zookeeper
-  #   container_name: zookeeper
-  #   environment:
-  #     ZOOKEEPER_CLIENT_PORT: '2181'
-  #   ports:
-  #     - "2181:2181"
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         cpus: '0.5'
-  #         memory: 512M
-  #     # condition, на основе которого проверяем готовность ZK
-  #     test: ["CMD", "echo", "ruok", "|", "nc", "localhost", "2181"]
-  #     interval: 5s
-  #     timeout: 5s
-  #     retries: 5
-
-  # kafka:
-  #   build: ./infra/messaging/kafka
-  #   hostname: kafka
-  #   container_name: kafka
-  #   depends_on:
-  #     zookeper:
-  #       condition: service_healthy
-  #   ports:
-  #     - "9092:9092"
-  #   environment:
-  #     # kafka:29092 для _internal_ коннектов
-  #     KAFKA_BROKER_ID: ${KAFKA_BROKER_ID}
-  #     KAFKA_ZOOKEEPER_CONNECT: ${KAFKA_ZOOKEEPER_CONNECT}
-  #     KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: ${KAFKA_LISTENER_SECURITY_PROTOCOL_MAP}
-  #     KAFKA_ADVERTISED_LISTENERS: ${KAFKA_ADVERTISED_LISTENERS}
-  #     KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: ${KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR}
-  #     KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: ${KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS}
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         cpus: '0.5'
-  #         memory: 512M
-  #   healthcheck:
-  #     # condition, на основе которого проверяем готовность Kafka
-  #     test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
-  #     interval: 5s
-  #     timeout: 5s
-  #     retries: 5
-
-  # spark:
-  #   build: ./infra/spark
-  #   container_name: spark
-  #   ports:
-  #     - "8080:8080"
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         cpus: '0.5'
-  #         memory: 512M
-
-  pg_datagen:
-    build: ./code/datagen/pg_datagen
-    container_name: pg-datagen
-    depends_on:
-      postgresql:
-        condition: service_healthy
-    environment:
-      << : *pg-connect
-      # Параметры генерации
-      PG_DATAGEN_NUM_USERS: ${PG_DATAGEN_NUM_USERS}
-      PG_DATAGEN_NUM_PRODUCTS: ${PG_DATAGEN_NUM_PRODUCTS}
-      PG_DATAGEN_NUM_ORDERS: ${PG_DATAGEN_NUM_ORDERS}
-      PG_DATAGEN_NUM_ORDER_DETAILS: ${PG_DATAGEN_NUM_ORDER_DETAILS}
-      PG_DATAGEN_NUM_CATEGORIES: ${PG_DATAGEN_NUM_CATEGORIES}
     deploy:
       resources:
         limits:
