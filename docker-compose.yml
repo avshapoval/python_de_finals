@@ -15,10 +15,12 @@ x-mysql-connection-env: &mysql-connect
   MYSQL_APP_PASSWORD: ${MYSQL_APP_PASSWORD}
 
 x-airflow-common-env: &airflow-common-env
-    AIRFLOW__CORE__SQL_ALCHEMY_CONN: sqlite:////usr/local/airflow/db/airflow.db
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////usr/local/airflow/db/airflow.db
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
     AIRFLOW_UID: ${AIRFLOW_UID}
+    _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME}
+    _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD}
 
 
 services:
@@ -69,6 +71,8 @@ services:
   airflow-webserver:
     build: ./infra/airflow/webserver
     container_name: airflow-webserver
+    environment:
+      <<: *airflow-common-env
     ports:
       - "8081:8080"
     restart: always
