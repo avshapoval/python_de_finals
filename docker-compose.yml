@@ -1,23 +1,99 @@
 version: '3.8'
 
+
+x-postgresql-connection-env: &pg-connect
+  POSTGRESQL_APP_HOST: ${POSTGRESQL_APP_HOST}
+  POSTGRESQL_APP_DB: ${POSTGRESQL_APP_DB}
+  POSTGRESQL_APP_SCHEMA: ${POSTGRESQL_APP_SCHEMA}
+  POSTGRESQL_APP_USER: ${POSTGRESQL_APP_USER}
+  POSTGRESQL_APP_PASSWORD: ${POSTGRESQL_APP_PASSWORD}
+
+x-mysql-connection-env: &mysql-connect
+  MYSQL_APP_HOST: ${MYSQL_APP_HOST}
+  MYSQL_APP_DB: ${MYSQL_APP_DB}
+  MYSQL_APP_USER: ${MYSQL_APP_USER}
+  MYSQL_APP_PASSWORD: ${MYSQL_APP_PASSWORD}
+
+x-airflow-common-env: &airflow-common-env
+    AIRFLOW__CORE__SQL_ALCHEMY_CONN: sqlite:////usr/local/airflow/db/airflow.db
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    AIRFLOW_UID: ${AIRFLOW_UID}
+
+
 services:
 
-  # В реальной разработке, конечно, лучше было бы использовать отдельный шаг в CI/CD для билда.
-  # В рамках учебного проекта объединим деплой и сборку при выполнении docker compose up.
+  airflow-init:
+    build: ./infra/airflow/init
+    container_name: airflow-init
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      # kafka:
+      #   condition: service_healthy
+      # zookeeper:
+      #   condition: service_healthy
+      pg_datagen:
+        condition: service_completed_successfully
+    environment:
+      <<: [*airflow-common-env, *pg-connect, *mysql-connect]
+    volumes:
+    - ./code/airflow/dags:/opt/airflow/dags
+    - sqlite_airflow_data:/usr/local/airflow/db:rw
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  airflow-scheduler:
+    build: ./infra/airflow/scheduler
+    container_name: airflow-scheduler
+    environment:
+      <<: *airflow-common-env
+    restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    volumes:
+    - ./code/airflow/dags:/opt/airflow/dags
+    - sqlite_airflow_data:/usr/local/airflow/db:rw
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  airflow-webserver:
+    build: ./infra/airflow/webserver
+    container_name: airflow-webserver
+    ports:
+      - "8081:8080"
+    restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    volumes:
+    - ./code/airflow/dags:/opt/airflow/dags
+    - sqlite_airflow_data:/usr/local/airflow/db:rw
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
 
   postgresql:
-    build: ./infra/postgresql
+    build: ./infra/db/postgresql
     container_name: postgresql
     environment:
+      << : *pg-connect
       # Пароль от root
       POSTGRES_PASSWORD: ${POSTGRESQL_ROOT_PASSWORD}
-      
-      POSTGRESQL_APP_USER: ${POSTGRESQL_APP_USER}
-      POSTGRESQL_APP_PASSWORD: ${POSTGRESQL_APP_PASSWORD}
-      POSTGRESQL_APP_DB: ${POSTGRESQL_APP_DB}
-      POSTGRESQL_APP_SCHEMA: ${POSTGRESQL_APP_SCHEMA}
     ports:
-      # Для просмотра данных с хоста
+      # Для просмотра данных с localhost
       - "5432:5432"
     volumes:
       - postgresql_data:/var/lib/postgres/data
@@ -27,21 +103,21 @@ services:
           cpus: '0.5'
           memory: 512M
     healthcheck:
+      # condition, на основе которого проверяем готовность СУБД
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   mysql:
-    build: ./infra/mysql
+    build: ./infra/db/mysql
     container_name: mysql
     environment:
+      <<: *mysql-connect
+      # Пароль от root
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_APP_USER: ${MYSQL_APP_USER}
-      MYSQL_APP_PASSWORD: ${MYSQL_APP_PASSWORD}
-      MYSQL_APP_DB: ${MYSQL_DATABASE}
     ports:
-      # Для просмотра данных с хоста
+      # Для просмотра данных с localhost
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
@@ -50,9 +126,15 @@ services:
         limits:
           cpus: '0.5'
           memory: 512M
+    healthcheck:
+      # condition, на основе которого проверяем готовность СУБД
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   # zookeeper:
-  #   build: ./infra/zookeeper
+  #   build: ./infra/messaging/zookeeper
   #   container_name: zookeeper
   #   environment:
   #     ZOOKEEPER_CLIENT_PORT: '2181'
@@ -63,13 +145,19 @@ services:
   #       limits:
   #         cpus: '0.5'
   #         memory: 512M
+  #     # condition, на основе которого проверяем готовность ZK
+  #     test: ["CMD", "echo", "ruok", "|", "nc", "localhost", "2181"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
 
   # kafka:
-  #   build: ./infra/kafka
+  #   build: ./infra/messaging/kafka
   #   hostname: kafka
   #   container_name: kafka
   #   depends_on:
-  #     - zookeeper
+  #     zookeper:
+  #       condition: service_healthy
   #   ports:
   #     - "9092:9092"
   #   environment:
@@ -85,6 +173,12 @@ services:
   #       limits:
   #         cpus: '0.5'
   #         memory: 512M
+  #   healthcheck:
+  #     # condition, на основе которого проверяем готовность Kafka
+  #     test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
 
   # spark:
   #   build: ./infra/spark
@@ -97,37 +191,20 @@ services:
   #         cpus: '0.5'
   #         memory: 512M
 
-  # airflow:
-  #   build: ./infra/airflow
-  #   depends_on:
-  #     - postgres
-  #     - mysql
-  #   environment:
-  #     AIRFLOW__CORE__EXECUTOR: LocalExecutor
-  #     AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRESQL_APP_USER}:${POSTGRESQL_APP_PASSWORD}@postgres:5432/${POSTGRESQL_APP_DB}
-  #     AIRFLOW__CORE__LOAD_EXAMPLES: 'False'
-  #   volumes:
-  #    - airflow_dags:/opt/airflow/dags
-  #   ports:
-  #     - "8081:8080"
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         cpus: '0.5'
-  #         memory: 512M   
-
-  data_generator:
-    build: ./code/datagen
-    container_name: datagen
+  pg_datagen:
+    build: ./code/datagen/pg_datagen
+    container_name: pg-datagen
     depends_on:
       postgresql:
         condition: service_healthy
     environment:
-      POSTGRESQL_APP_USER: ${POSTGRESQL_APP_USER}
-      POSTGRESQL_APP_PASSWORD: ${POSTGRESQL_APP_PASSWORD}
-      POSTGRESQL_APP_HOST: ${POSTGRESQL_APP_HOST}
-      POSTGRESQL_APP_DB: ${POSTGRESQL_APP_DB}
-      POSTGRESQL_APP_SCHEMA: ${POSTGRESQL_APP_SCHEMA}
+      << : *pg-connect
+      # Параметры генерации
+      PG_DATAGEN_NUM_USERS: ${PG_DATAGEN_NUM_USERS}
+      PG_DATAGEN_NUM_PRODUCTS: ${PG_DATAGEN_NUM_PRODUCTS}
+      PG_DATAGEN_NUM_ORDERS: ${PG_DATAGEN_NUM_ORDERS}
+      PG_DATAGEN_NUM_ORDER_DETAILS: ${PG_DATAGEN_NUM_ORDER_DETAILS}
+      PG_DATAGEN_NUM_CATEGORIES: ${PG_DATAGEN_NUM_CATEGORIES}
     deploy:
       resources:
         limits:
@@ -137,9 +214,4 @@ services:
 volumes:
   postgresql_data:
   mysql_data:
-  airflow_dags:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ./code/airflow/dags
+  sqlite_airflow_data:
