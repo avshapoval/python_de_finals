@@ -241,8 +241,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '1'
+          memory: 1G
 
   airflow-webserver:
     build: ./infra/airflow/webserver
@@ -262,8 +262,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '1'
+          memory: 1G
 
 volumes:
   postgresql-data:
