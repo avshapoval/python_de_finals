@@ -14,13 +14,16 @@ x-mysql-connection-env: &mysql-connect
   MYSQL_APP_PASSWORD: ${MYSQL_APP_PASSWORD}
 
 x-airflow-common-env: &airflow-common-env
-  AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}
   AIRFLOW__CORE__LOAD_EXAMPLES: ${AIRFLOW__CORE__LOAD_EXAMPLES}
+  AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}
   AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: ${AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK}
+  AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW__WEBSERVER__SECRET_KEY}
   AIRFLOW_UID: ${AIRFLOW_UID}
   _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME}
   _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD}
-  SPARK_MASTER_URL: ${SPARK_MASTER_URL}
+  SPARK_MASTER_HOST: ${SPARK_MASTER_HOST}
+  SPARK_MASTER_PORT: ${SPARK_MASTER_PORT}
+  
 
 x-spark-common-env: &spark-common-env
   SPARK_RPC_AUTHENTICATION_ENABLED: ${SPARK_RPC_AUTHENTICATION_ENABLED}
@@ -148,8 +151,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '1'
+          memory: 1G
 
   spark-worker:
     build: ./infra/spark/spark-worker
@@ -157,8 +160,8 @@ services:
     environment:
       <<: *spark-common-env
       SPARK_MODE: worker
-      SPARK_MASTER_URL: ${SPARK_MASTER_URL}
-      SPARK_WORKER_MEMORY: 500M
+      SPARK_MASTER_URL: spark://${SPARK_MASTER_HOST}:${SPARK_MASTER_PORT}
+      SPARK_WORKER_MEMORY: 1G
       SPARK_WORKER_CORES: 1
     volumes:
       - spark-data:/bitnami
@@ -169,8 +172,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '1'
+          memory: 1G
 
   # Datagen
   pg_datagen:
@@ -214,6 +217,7 @@ services:
       <<: [*airflow-common-env, *pg-connect, *mysql-connect]
     volumes:
     - ./code/airflow/dags:/opt/airflow/dags
+    - ./code/airflow/scripts:/opt/airflow/scripts
     - sqlite-airflow-data:/usr/local/airflow/db:rw
     deploy:
       resources:
@@ -232,6 +236,7 @@ services:
         condition: service_completed_successfully
     volumes:
     - ./code/airflow/dags:/opt/airflow/dags
+    - ./code/airflow/scripts:/opt/airflow/scripts
     - sqlite-airflow-data:/usr/local/airflow/db:rw
     deploy:
       resources:
@@ -252,6 +257,7 @@ services:
         condition: service_completed_successfully
     volumes:
     - ./code/airflow/dags:/opt/airflow/dags
+    - ./code/airflow/scripts:/opt/airflow/scripts
     - sqlite-airflow-data:/usr/local/airflow/db:rw
     deploy:
       resources:

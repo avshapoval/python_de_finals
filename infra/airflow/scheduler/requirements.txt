@@ -1,3 +1,5 @@
-grpcio-status>=1.59.0
 pyspark==3.5.3
 apache-airflow-providers-apache-spark==4.11.3
+apache-airflow-providers-common-sql==1.20.0
+apache-airflow-providers-postgres==5.14.0
+apache-airflow-providers-mysql==5.7.4

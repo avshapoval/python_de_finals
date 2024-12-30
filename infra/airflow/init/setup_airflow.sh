@@ -13,26 +13,38 @@ airflow users create \
     --email spiderman@superhero.org
 
 # Создание коннектов
-airflow connections add \
-    --conn-type 'postgres' \
-    --conn-host "$POSTGRESQL_APP_HOST" \
-    --conn-login "$POSTGRESQL_APP_USER" \
-    --conn-password "$POSTGRESQL_APP_PASSWORD" \
-    --conn-schema "$POSTGRESQL_APP_DB" \
-    --conn-port '5432' \
-    'python_de_finals_postgresql'
+airflow connections add 'python_de_finals_postgresql' \
+    --conn-json '{
+        "conn_type": "postgres",
+        "login": "'"$POSTGRESQL_APP_USER"'",
+        "password": "'"$POSTGRESQL_APP_PASSWORD"'",
+        "host": "'"$POSTGRESQL_APP_HOST"'",
+        "port": 5432,
+        "schema": "'"$POSTGRESQL_APP_DB"'",
+        "extra": {
+            "currentSchema": "'"$POSTGRESQL_APP_SCHEMA"'"
+        }
+    }'
 
-airflow connections add \
-    --conn-type 'mysql' \
-    --conn-host "$MYSQL_APP_HOST" \
-    --conn-login "$MYSQL_APP_USER" \
-    --conn-password "$MYSQL_APP_PASSWORD" \
-    --conn-schema "$MYSQL_DATABASE" \
-    --conn-port '3306' \
-    'python_de_finals_mysql'
+airflow connections add 'python_de_finals_mysql' \
+    --conn-json '{
+        "conn_type": "mysql",
+        "login": "'"$MYSQL_APP_USER"'",
+        "password": "'"$MYSQL_APP_PASSWORD"'",
+        "host": "'"$MYSQL_APP_HOST"'",
+        "port": 3306,
+        "schema": "'"$MYSQL_APP_DB"'"
+    }'
 
-airflow connections add \
-    --conn-uri "$SPARK_MASTER_URL?deploy-mode=client&spark_binary=spark3-submit" \
-    'python_de_finals_spark'
+airflow connections add 'python_de_finals_spark' \
+    --conn-json '{
+        "conn_type": "generic",
+        "host": "spark://'"$SPARK_MASTER_HOST"'",
+        "port": "'"$SPARK_MASTER_PORT"'",
+        "extra": {
+            "deploy-mode": "client",
+            "spark_binary": "spark3-submit"
+        }
+    }'
 
 airflow version
