@@ -139,7 +139,6 @@ services:
       SPARK_MASTER_WEBUI_PORT: 8081
     ports:
       - "8081:8081"
-      - "7077:7077"
     volumes:
       - spark-data:/bitnami
 #      - spark-apps:/opt/spark-apps
@@ -177,7 +176,7 @@ services:
 
   # Datagen
   pg_datagen:
-    build: ./code/datagen/pg_datagen
+    build: ./infra/datagen/pg_datagen
     container_name: pg-datagen
     depends_on:
       postgresql:
@@ -190,6 +189,8 @@ services:
       PG_DATAGEN_NUM_ORDERS: ${PG_DATAGEN_NUM_ORDERS}
       PG_DATAGEN_NUM_ORDER_DETAILS: ${PG_DATAGEN_NUM_ORDER_DETAILS}
       PG_DATAGEN_NUM_CATEGORIES: ${PG_DATAGEN_NUM_CATEGORIES}
+    volumes:
+    - ./code/datagen/pg_datagen:/app/src
     deploy:
       resources:
         limits:

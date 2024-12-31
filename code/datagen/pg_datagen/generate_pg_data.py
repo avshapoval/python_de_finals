@@ -42,7 +42,7 @@ class DataGenerator:
         self.__num_products = int(os.getenv('PG_DATAGEN_NUM_PRODUCTS', 500))
         self.__num_orders = int(os.getenv('PG_DATAGEN_NUM_ORDERS', 10000))
         self.__num_order_details = int(os.getenv('PG_DATAGEN_NUM_ORDER_DETAILS', 40000))
-        self.__num_categories = int(os.getenv('PG_DATAGEN_NUM_CATEGORIES', 40000))
+        self.__num_product_categories = int(os.getenv('PG_DATAGEN_NUM_CATEGORIES', 40000))
     
     def __table_is_empty(self, cur, table_name):
         """Проверка, что таблица пуста.
@@ -58,14 +58,13 @@ class DataGenerator:
         count = cur.fetchone()[0]
         return count == 0
 
-    def __generate_users(self, cur: cursor, num_users: int = 100) -> None:
+    def __generate_users(self, cur: cursor) -> None:
         """Генерация данных для таблицы users.
 
         Args:
             cur (cursor): Объект курсора для выполнения SQL-запросов.
-            num_users (int): Количество пользователей для генерации.
         """
-        for _ in range(num_users):
+        for _ in range(self.__num_users):
             first_name = self.__fake.first_name()
             last_name = self.__fake.last_name()
 
@@ -82,12 +81,11 @@ class DataGenerator:
             user_id = cur.fetchone()[0]
             self.__user_ids.append(user_id)
 
-    def __generate_product_categories(self, cur: cursor, num_categories: int = 10) -> None:
+    def __generate_product_categories(self, cur: cursor) -> None:
         """Генерация данных для таблицы product_categories.
 
         Args:
             cur (cursor): Объект курсора для выполнения SQL-запросов.
-            num_categories (int): Количество случайных категорий товаров для генерации. 10 основных создаются всегда.
         """
         predefined_categories = ["Electronics", "Clothing", "Books", "Home", "Toys", "Sport", "Cars", "Beauty", "Health", "Food"]
         
@@ -99,7 +97,7 @@ class DataGenerator:
             category_id = cur.fetchone()[0]
             self.__category_ids.append(category_id)
 
-        for _ in range(num_categories):
+        for _ in range(self.__num_product_categories):
             name = self.__fake.words(nb=1)
 
             # 50/50, что получится подкатегория
@@ -112,18 +110,17 @@ class DataGenerator:
             category_id = cur.fetchone()[0]
             self.__category_ids.append(category_id)
 
-    def __generate_products(self, cur: cursor, num_products: int = 100) -> None:
+    def __generate_products(self, cur: cursor) -> None:
         """Генерация данных для таблицы products.
 
         Args:
             cur (cursor): Объект курсора для выполнения SQL-запросов.
-            num_products (int): Количество товаров для генерации.
         """
-        for _ in range(num_products):
+        for _ in range(self.__num_products):
             name = self.__fake.ecommerce_name()
             description = self.__fake.paragraph(nb_sentences=2)
 
-            category_id = random.randint(1, 10)
+            category_id = random.choice(self.__category_ids)
             price = round(random.uniform(10.0, 100.0), 2)
 
             stock_quantity = random.randint(1, 100)
@@ -136,14 +133,13 @@ class DataGenerator:
             product_id = cur.fetchone()[0]
             self.__product_ids.append(product_id)
 
-    def __generate_orders(self, cur: cursor, num_orders: int = 100) -> None:
+    def __generate_orders(self, cur: cursor) -> None:
         """Генерация данных для таблицы orders.
 
         Args:
             cur (cursor): Объект курсора для выполнения SQL-запросов.
-            num_orders (int): Количество заказов для генерации.
         """
-        for _ in range(num_orders):
+        for _ in range(self.__num_orders):
             user_id = random.choice(self.__user_ids)
             order_date = self.__fake.date_time_between(start_date='-1y', end_date='now')
             
@@ -158,14 +154,13 @@ class DataGenerator:
             order_id = cur.fetchone()[0]
             self.__order_ids.append(order_id)
 
-    def __generate_order_details(self, cur: cursor, num_order_details: int = 100) -> None:
+    def __generate_order_details(self, cur: cursor) -> None:
         """Генерация данных для таблицы order_details.
 
         Args:
             cur (cursor): Объект курсора для выполнения SQL-запросов.
-            num_order_details (int): Количество деталей заказов для генерации.
         """
-        for _ in range(num_order_details):
+        for _ in range(self.__num_order_details):
             order_id = random.choice(self.__order_ids)
             product_id = random.choice(self.__product_ids)
 
@@ -194,7 +189,7 @@ class DataGenerator:
         self.__logger.info(f"Generating data ({num_elements} rows) for {table_name}...")
 
         try:
-            generate_method(cur, num_elements)
+            generate_method(cur)
             self.__logger.info(f"Successfully generated {num_elements} rows for {table_name}.")
         except (OperationalError, DatabaseError)  as e:
             self.__logger.info(f"Error generating data: {e}")
@@ -207,19 +202,19 @@ class DataGenerator:
             conn.cursor() as cur
         ):
             # Юзеры
-            self.__execute_generation_task(cur, 'users', self.__generate_users, 5000)
+            self.__execute_generation_task(cur, 'users', self.__generate_users, self.__num_users)
 
             # Категории
-            self.__execute_generation_task(cur, 'product_categories', self.__generate_product_categories, 500)
+            self.__execute_generation_task(cur, 'product_categories', self.__generate_product_categories, self.__num_product_categories)
 
             # Продукты
-            self.__execute_generation_task(cur, 'products', self.__generate_products, 10000)
+            self.__execute_generation_task(cur, 'products', self.__generate_products, self.__num_products)
 
             # Заказы
-            self.__execute_generation_task(cur, 'orders', self.__generate_orders, 40000)
+            self.__execute_generation_task(cur, 'orders', self.__generate_orders, self.__num_orders)
 
             # Детали заказов
-            self.__execute_generation_task(cur, 'order_details', self.__generate_order_details, 40000)
+            self.__execute_generation_task(cur, 'order_details', self.__generate_order_details, self.__num_order_details)
 
             # Все или ничего
             conn.commit()
