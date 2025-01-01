@@ -63,7 +63,7 @@ graph TD
         MY
     end
 
-    subgraph Messaging
+    subgraph Kafka
         ZK -->|service_healthy| KF
         KF -->|service_healthy| KI
     end
