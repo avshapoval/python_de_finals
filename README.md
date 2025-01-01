@@ -61,15 +61,12 @@ graph TD
     subgraph Databases
         PG
         MY
+        PG -->|service_healthy| PGDG
     end
 
     subgraph Kafka
         ZK -->|service_healthy| KF
         KF -->|service_healthy| KI
-    end
-
-    subgraph Datagen
-        PG -->|service_healthy| PGDG
         KI -->|service_completed_successfully| KDG
     end
 
