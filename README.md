@@ -204,7 +204,7 @@ graph TD
     ```
 3. Запустить команду:
     ```
-    docker-compose up --build [-d]
+    docker compose up --build [-d]
     ```
 4. После сборки проекта и его развертывания будут доступны интерфейсы PostgreSQL, MySQL, Airflow, Kafka и Spark по указанным выше URL.
 5. Все что остается сделать вручную после окончания деплоя - включить (переевсти в `unpaused`) DAG в UI Airflow. Т.к. используется всего один executor (`SequentialExecutor`), включать необходимо в следующей последовательности:
