@@ -5,8 +5,8 @@ airflow db migrate
 
 # Создание юзеров
 airflow users create \
-    --username admin \
-    --password admin \
+    --username "$_AIRFLOW_WWW_USER_USERNAME" \
+    --password "$_AIRFLOW_WWW_USER_PASSWORD" \
     --firstname Peter \
     --lastname Parker \
     --role Admin \

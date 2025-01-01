@@ -9,9 +9,9 @@ from airflow.providers.mysql.hooks.mysql import MySqlHook
 from scripts.helpers.airflow_common import get_connection_uri
 
 # Константы
-ANALYTICAL_MARTS = ["user_activity", "product_sales"]
+ANALYTICAL_MARTS = ["user_activity", "product_sales", "average_check"]
 JARS = "/opt/airflow/spark/jars/mysql-connector-java-8.3.0.jar"
-PYSPARK_SCRIPT_PATH = '/opt/airflow/scripts/pyspark_scripts/create_analytical_views.py'
+PYSPARK_SCRIPT_PATH = '/opt/airflow/scripts/pyspark_scripts/populate_analytical_marts.py'
 
 # Параметры по умолчанию для DAG
 default_args = {

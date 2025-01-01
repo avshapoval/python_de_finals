@@ -130,6 +130,64 @@ def create_product_sales_view(src_tgt_url: str, src_tgt_driver: str, tgt_mart_na
     spark.stop()
 
 
+def create_average_check_view(src_tgt_url: str, src_tgt_driver: str, tgt_mart_name: str):
+    """
+    Создает/перезаписывает витрину среднего чека с разбивкой по статусу заказа и статусу лояльности.
+    
+    Args:
+        src_tgt_url (str): URL для подключения к источнику и приемнику.
+        src_tgt_driver (str): Драйвер для подключения к СУБД.
+        tgt_mart_name (str): Имя целевой витрины данных.
+    """
+    # Создание Spark сессии
+    spark = (
+        SparkSession.builder
+        .appName(f"Create_mart_{tgt_mart_name}")
+        .getOrCreate()
+    )
+
+    # Чтение данных из "STG" слоя
+    orders_df = ( 
+        spark.read
+        .format("jdbc")
+        .option("url", src_tgt_url)
+        .option("driver", src_tgt_driver)
+        .option("dbtable", "orders") \
+        .load()
+    )
+
+    users_df = ( 
+        spark.read
+        .format("jdbc")
+        .option("url", src_tgt_url)
+        .option("driver", src_tgt_driver)
+        .option("dbtable", "users") \
+        .load()
+    )
+
+    # Создание витрины
+    average_check_df = (
+        orders_df.join(users_df, "user_id")
+        .groupBy("status", "loyalty_status")
+        .agg({"total_amount": "avg"})
+        .withColumnRenamed("avg(total_amount)", "average_check")
+    )
+
+    # Overwrite в приемнике
+    (
+        average_check_df.write
+        .format("jdbc")
+        .option("url", src_tgt_url)
+        .option("driver", src_tgt_driver)
+        .option("dbtable", f"mart_{tgt_mart_name}")
+        .mode("overwrite")
+        .save()
+    )
+
+    # Остановка Spark сессии
+    spark.stop()
+
+
 def main():
     """
     Точка входа. Парсит аргументы и запускает создание/перезапись соответствующей витрины.
@@ -137,19 +195,20 @@ def main():
     Args:
         --src_tgt_url (str): URL для подключения к источнику и приемнику.
         --src_tgt_driver (str): Драйвер для подключения к СУБД.
-        --target_mart (str): Имя целевой витрины данных. Возможные значения: 'user_activity', 'product_sales'.
+        --target_mart (str): Имя целевой витрины данных. Возможные значения: 'user_activity', 'product_sales', 'average_check'.
     """
     parser = argparse.ArgumentParser()
     parser.add_argument('--src_tgt_url', type=str, required=True)
     parser.add_argument("--src_tgt_driver", type=str, required=True)
-    parser.add_argument('--target_mart', type=str, required=True, choices=['user_activity', 'product_sales'])
+    parser.add_argument('--target_mart', type=str, required=True, choices=['user_activity', 'product_sales', 'average_check'])
     args = parser.parse_args()
 
     if args.target_mart == "user_activity":
         create_user_activity_view(args.src_tgt_url, args.src_tgt_driver, args.target_mart)
-
     elif args.target_mart == "product_sales":
         create_product_sales_view(args.src_tgt_url, args.src_tgt_driver, args.target_mart)
+    elif args.target_mart == "average_check":
+        create_average_check_view(args.src_tgt_url, args.src_tgt_driver, args.target_mart)
 
 
 if __name__ == "__main__":
