@@ -24,7 +24,6 @@ x-airflow-common-env: &airflow-common-env
   SPARK_MASTER_HOST: ${SPARK_MASTER_HOST}
   SPARK_MASTER_PORT: ${SPARK_MASTER_PORT}
   
-
 x-spark-common-env: &spark-common-env
   SPARK_RPC_AUTHENTICATION_ENABLED: ${SPARK_RPC_AUTHENTICATION_ENABLED}
   SPARK_RPC_ENCRYPTION_ENABLED: ${SPARK_RPC_ENCRYPTION_ENABLED}
@@ -81,54 +80,56 @@ services:
           cpus: '0.5'
           memory: 512M
 
-  # # ZK & Kafka
-  # zookeeper:
-  #   build: ./infra/messaging/zookeeper
-  #   container_name: zookeeper
-  #   environment:
-  #     ZOOKEEPER_CLIENT_PORT: '2181'
-  #   ports:
-  #     - "2181:2181"
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         cpus: '0.5'
-  #         memory: 512M
-  #     # condition, на основе которого проверяем готовность ZK
-  #     test: ["CMD", "echo", "ruok", "|", "nc", "localhost", "2181"]
-  #     interval: 5s
-  #     timeout: 5s
-  #     retries: 5
+  # ZK & Kafka
+  zookeeper:
+    build: ./infra/messaging/zookeeper
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: '2181'
+    ports:
+      - "2181:2181"
+    healthcheck:
+      # condition, на основе которого проверяем готовность ZK
+      test: ["CMD", "echo", "ruok", "|", "nc", "localhost", "2181"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
 
-  # kafka:
-  #   build: ./infra/messaging/kafka
-  #   hostname: kafka
-  #   container_name: kafka
-  #   depends_on:
-  #     zookeper:
-  #       condition: service_healthy
-  #   ports:
-  #     - "9092:9092"
-  #   environment:
-  #     # kafka:29092 для _internal_ коннектов
-  #     KAFKA_BROKER_ID: ${KAFKA_BROKER_ID}
-  #     KAFKA_ZOOKEEPER_CONNECT: ${KAFKA_ZOOKEEPER_CONNECT}
-  #     KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: ${KAFKA_LISTENER_SECURITY_PROTOCOL_MAP}
-  #     KAFKA_ADVERTISED_LISTENERS: ${KAFKA_ADVERTISED_LISTENERS}
-  #     KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: ${KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR}
-  #     KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: ${KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS}
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         cpus: '0.5'
-  #         memory: 512M
-  #   healthcheck:
-  #     # condition, на основе которого проверяем готовность Kafka
-  #     test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
-  #     interval: 5s
-  #     timeout: 5s
-  #     retries: 5
-
+  kafka:
+    build: ./infra/messaging/kafka
+    hostname: kafka
+    container_name: kafka
+    depends_on:
+      zookeper:
+        condition: service_healthy
+    ports:
+      - "9092:9092"
+    environment:
+      # kafka:29092 для _internal_ коннектов
+      KAFKA_BROKER_ID: ${KAFKA_BROKER_ID}
+      KAFKA_ZOOKEEPER_CONNECT: ${KAFKA_ZOOKEEPER_CONNECT}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: ${KAFKA_LISTENER_SECURITY_PROTOCOL_MAP}
+      KAFKA_ADVERTISED_LISTENERS: ${KAFKA_ADVERTISED_LISTENERS}
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: ${KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR}
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: ${KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS}
+      KAFKA_TOPIC_NAME: ${KAFKA_TOPIC_NAME}
+    healthcheck:
+      # condition, на основе которого проверяем готовность Kafka
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    
   # Spark
   spark-master:
     build: ./infra/spark/spark-master
