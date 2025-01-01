@@ -25,9 +25,8 @@ default_args = {
     'catchup': False
 }
 
-
 with DAG(
-    'create_analytical_views',
+    'create_analytical_marts',
     default_args=default_args,
     description='Создание витрин данных в MySQL через Spark',
     schedule_interval=timedelta(days=1),

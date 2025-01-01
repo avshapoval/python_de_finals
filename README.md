@@ -6,26 +6,32 @@
 - **Airflow**: Оркестрация.
 - **Spark**: Обработка данных.
 - **PostgreSQL** и **MySQL**: Реляционные базы данных.
+- **Kafka** и **Zookeeper**: Системы обмена сообщениями.
+- **Python**: Генераторы данных в PG и Kafka.
 - **Docker**: Контейнеризация сервисов.
 
 ### Важно
 - Проект рекомендуется запускать на устройстве с RAM>=16GB. Из-за большого количества сервисов без предварительных ограничений Docker может занять практически всю свободную оперативную память, сильно замедляя локаль вплоть до необходимости перезапуска.
-- Время сборки проекта: 10-15 минут в зависимости от выделенных ресурсов и пропускной способности сети.
-- Время развертывания проекта: 5-10 минут в зависимости от выделенных ресурсов.
+- Время сборки проекта: 10-20 минут в зависимости от доступных ресурсов и пропускной способности сети.
+- Время развертывания проекта: 5-10 минут в зависимости от доступных ресурсов.
 
 ## Автоматизация
 
-Система состоит из 8 контейнеров:
+Система состоит из 11 контейнеров:
 1. PostgreSQL
 2. MySQL
 3. Spark Master
 4. Spark Worker
 5. Генератор данных для PostgreSQL (pg_datagen)
-6. Airflow Init
-7. Airflow Scheduler
-8. Airflow Webserver
+6. Генератор данных для Kafka (kafka_datagen)
+7. Kafka Init
+8. Kafka
+9. Zookeeper
+10. Airflow Init
+11. Airflow Scheduler
+12. Airflow Webserver
 
-Все контейнеры основаны на открытых Docker image, соответствующих их функциям. Они автоматически настраиваются и проверяют свою готовность с использованием Healthcheck. Система обеспечена скриптами для автоматической генерации данных, их репликации и создания аналитических витрин.
+Все контейнеры основаны на открытых Docker Image. Они автоматически настраиваются и проверяют свою готовность с использованием Healthcheck. Система обеспечена скриптами для автоматической генерации данных, их репликации, стриминга и создания аналитических витрин.
 
 ### Идемпотентность
 
@@ -35,24 +41,36 @@
 
 ### Dependency Graph сборки
 
+Каждая нода графа - отдельный
 
 ```mermaid
 graph TD
-    PG[PostgreSQL]
-    MY[MySQL]
+    PG[postgresql]
+    MY[mysql]
     PGDG[pg-datagen]
+    KDG[kafka-datagen]
     AI[airflow-init]
     AS[airflow-scheduler]
     AW[airflow-webserver]
-    SM[Spark Master]
-    SW[Spark Worker]
+    SM[spark-master]
+    SW[spark-worker]
+    ZK[zookeeper]
+    KF[kafka]
+    KI[kafka-init]
+
     subgraph Databases
         PG
         MY
     end
 
+    subgraph Messaging
+        ZK -->|service_healthy| KF
+        KF -->|service_healthy| KI
+    end
+
     subgraph Datagen
         PG -->|service_healthy| PGDG
+        KI -->|service_completed_successfully| KDG
     end
 
     subgraph Spark
@@ -63,7 +81,9 @@ graph TD
         PG -->|service_healthy| AI
         MY -->|service_healthy| AI
         SM -->|service_healthy| AI
+        KF -->|service_healthy| AI
         PGDG -->|service_completed_successfully| AI
+        KDG -->|service_completed_successfully| AI
         AI -->|service_completed_successfully| AS
         AI -->|service_completed_successfully| AW
     end
@@ -94,19 +114,35 @@ graph TD
 ### Spark Master
 - **URL**: `http://localhost:8081`
 
+### Kafka
+- **Bootstrap Servers**: `localhost:9092`
+- **Топик**: `new_users_events`
+
 ### Генерация данных
-**Параметры генерации для Potgresql по умолчанию:**
+
+**Параметры генерации для PostgreSQL по умолчанию:**
   - Количество пользователей: 5000
   - Количество товаров: 500
   - Количество заказов: 10000
   - Детали заказов: 40000
   - Категории товаров: 5000
 
+**Параметры генерации для Kafka по умолчанию:**
+  - Интервал генерации событий: 3 секунды
+  - Топик Kafka: `new_users_events`
+  - События генерируются в формате JSON с полями: `first_name`, `last_name`, `email`, `phone`, `registration_date`, `loyalty_status`.
+
 ## Репликация данных
-С помощью Airflow реализована репликация данных из PostgreSQL в MySQL. DAG выполняет следующие задачи:
+В Airflow реализована репликация данных из PostgreSQL в MySQL. DAG выполняет следующие задачи:
 1. Извлечение данных из PostgreSQL.
-2. Трансформация данных через PySpark.
-3. Загрузка данных в MySQL.
+2. Трансформация данных через Spark.
+3. Сохранение данных в MySQL.
+
+## Стриминг данных
+В Airflow реализована обработка данных из Kafka. DAG выполняет следующие задачи:
+1. Получение данных из темы Kafka.
+2. Обработка данных с использованием Spark.
+3. Сохранение данных в PostgreSQL.
 
 ## Аналитические витрины
 
@@ -154,7 +190,7 @@ graph TD
 
 ### Скрипты для витрин
 
-Для создания витрин используется PySpark. Скрипты загружают данные из MySQL, выполняют агрегации и сохраняют результаты обратно в базу данных. Шаги:
+Для создания витрин используется Spark. Скрипты загружают данные из MySQL, выполняют агрегации и сохраняют результаты обратно в базу данных. Шаги:
 1. Загрузка исходных данных из базы данных MySQL.
 2. Выполнение трансформаций (объединения, группировки, агрегации, etc.)
 3. Сохранение результирующих витрин в базу данных MySQL.
@@ -171,12 +207,13 @@ graph TD
     ```
 3. Запустить команду:
     ```
-    docker-compose up --build
+    docker-compose up --build [-d]
     ```
-4. После сборки проекта и его развертывания будут доступны интерфейсы PostgreSQL, MySQL, Airflow и Spark по указанным выше URL.
-5. Все что остается сделать вручную после окончания деплоя - включить DAG в UI Airflow. Т.к. используется всего один executor, включать необходимо в следующей последовательности:
+4. После сборки проекта и его развертывания будут доступны интерфейсы PostgreSQL, MySQL, Airflow, Kafka и Spark по указанным выше URL.
+5. Все что остается сделать вручную после окончания деплоя - включить (переевсти в `unpaused`) DAG в UI Airflow. Т.к. используется всего один executor (`SequentialExecutor`), включать необходимо в следующей последовательности:
     1. replicate_from_pg_to_mysql
-    2. create_analytical_views
+    2. create_analytical_marts
+    3. stream_from_kafka_to_pg
 
 ## Структура проекта
 Проект орагнизован следующим образом:
@@ -186,14 +223,19 @@ python_de_finals/
 ├── docker-compose.yml  # Конфигурация Docker Compose
 ├── infra/              # Инфраструктура контейнеров
 │   ├── airflow/        # Конфигурация Airflow
-│   │   ├── init/       # Инициализация Airflow
-│   │   ├── scheduler/  # Планировщик Airflow
-│   │   └── webserver/  # Веб-сервер Airflow
-│   ├── datagen/        # Конфигурация и Dockerfile для генераторов данных
-│   │   └── pg_datagen/ 
+│   │   ├── init/       
+│   │   ├── scheduler/  
+│   │   └── webserver/  
+│   ├── datagen/        # Конфигурация для генераторов данных
+│   │   ├── pg_datagen/
+│   │   └── kafka_datagen/
 │   ├── db/             # Конфигурация СУБД
 │   │   ├── mysql/     
 │   │   └── postgresql/
+│   ├── messaging/      # Конфигурация ZK&Kafka
+│   │   ├── kafka/
+│   │   ├── kafka_init/
+│   │   └── zookeeper/
 │   └── spark/          # Конфигурация Spark
 │       ├── spark-master/
 │       └── spark-worker/
@@ -204,5 +246,6 @@ python_de_finals/
 │   │       ├── helpers/        # Вспомогательные модули
 │   │       └── pyspark_scripts/ # Скрипты PySpark
 │   ├── datagen/        # Генераторы данных
-│   │   └── pg_datagen/ # Скрипты для генерации данных в PG
+│   │   ├── pg_datagen/ # Скрипты для генерации данных в PG
+│   │   └── kafka_datagen/ # Скрипты для генерации данных в Kafka
 ```

@@ -30,6 +30,10 @@ x-spark-common-env: &spark-common-env
   SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: ${SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED}
   SPARK_SSL_ENABLED: ${SPARK_SSL_ENABLED}
 
+x-kafka-common-env: &kafka-common-env
+  KAFKA_INTERNAL_CONNECT_PATH: ${KAFKA_INTERNAL_CONNECT_PATH}
+  KAFKA_TOPIC_NAME: ${KAFKA_TOPIC_NAME}
+
 services:
   # RDBMS
   postgresql:
@@ -105,30 +109,43 @@ services:
     hostname: kafka
     container_name: kafka
     depends_on:
-      zookeper:
+      zookeeper:
         condition: service_healthy
     ports:
-      - "9092:9092"
+      - "29092:9092"
     environment:
-      # kafka:29092 для _internal_ коннектов
+      <<: *kafka-common-env
       KAFKA_BROKER_ID: ${KAFKA_BROKER_ID}
       KAFKA_ZOOKEEPER_CONNECT: ${KAFKA_ZOOKEEPER_CONNECT}
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: ${KAFKA_LISTENER_SECURITY_PROTOCOL_MAP}
       KAFKA_ADVERTISED_LISTENERS: ${KAFKA_ADVERTISED_LISTENERS}
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: ${KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR}
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: ${KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS}
-      KAFKA_TOPIC_NAME: ${KAFKA_TOPIC_NAME}
     healthcheck:
       # condition, на основе которого проверяем готовность Kafka
       test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
       interval: 5s
-      timeout: 5s
+      timeout: 30s
       retries: 5
     deploy:
       resources:
         limits:
           cpus: '0.5'
           memory: 512M
+
+  kafka-init:
+    build: ./infra/messaging/kafka_init
+    container_name: kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      <<: *kafka-common-env
+    deploy:
+        resources:
+          limits:
+            cpus: '0.5'
+            memory: 512M
     
   # Spark
   spark-master:
@@ -142,7 +159,6 @@ services:
       - "8081:8081"
     volumes:
       - spark-data:/bitnami
-#      - spark-apps:/opt/spark-apps
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8081"]
       interval: 10s
@@ -165,7 +181,6 @@ services:
       SPARK_WORKER_CORES: 1
     volumes:
       - spark-data:/bitnami
-#      - spark-apps:/opt/spark-apps
     depends_on:
       spark-master:
         condition: service_healthy
@@ -176,7 +191,7 @@ services:
           memory: 1G
 
   # Datagen
-  pg_datagen:
+  pg-datagen:
     build: ./infra/datagen/pg_datagen
     container_name: pg-datagen
     depends_on:
@@ -198,6 +213,24 @@ services:
           cpus: '0.5'
           memory: 512M
 
+  kafka-datagen:
+    build: ./infra/datagen/kafka_datagen
+    container_name: kafka-datagen
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      << : *kafka-common-env
+      # Параметры генерации
+      KAFKA_DATAGEN_PERIOD_SECS: ${KAFKA_DATAGEN_PERIOD_SECS}
+    volumes:
+    - ./code/datagen/kafka_datagen:/app/src
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
   # Airflow
   airflow-init:
     build: ./infra/airflow/init
@@ -207,14 +240,14 @@ services:
         condition: service_healthy
       mysql:
         condition: service_healthy
-      # kafka:
-      #   condition: service_healthy
-      # zookeeper:
-      #   condition: service_healthy
-      pg_datagen:
-        condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
       spark-master:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      pg-datagen:
+        condition: service_completed_successfully
     environment:
       <<: [*airflow-common-env, *pg-connect, *mysql-connect]
     volumes:
@@ -231,7 +264,7 @@ services:
     build: ./infra/airflow/scheduler
     container_name: airflow-scheduler
     environment:
-      <<: *airflow-common-env
+      <<: [*airflow-common-env, *kafka-common-env]
     restart: always
     depends_on:
       airflow-init:

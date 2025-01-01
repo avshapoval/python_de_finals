@@ -9,4 +9,4 @@ RUN pip install -r requirements.txt
 
 WORKDIR /app/src/
 
-CMD ["python", "data_generator.py"]
+CMD ["python", "-u", "generate_kafka_data.py"]

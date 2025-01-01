@@ -15,7 +15,7 @@ JARS = "/opt/airflow/spark/jars/postgresql-42.2.18.jar,/opt/airflow/spark/jars/m
 PYSPARK_REPLICATION_SCRIPT_PATH = f'/opt/airflow/scripts/pyspark_scripts/replicate_table_by_spark.py'
 
 # Параметры по умолчанию для DAG
-DEFAULT_DAG_ARGS = {
+default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
     'start_date': datetime(2024, 12, 30),
@@ -26,10 +26,9 @@ DEFAULT_DAG_ARGS = {
     'catchup': False
 }
 
-
 with DAG(
     'replicate_from_pg_to_mysql',
-    default_args=DEFAULT_DAG_ARGS,
+    default_args=default_args,
     description='Репликация данных из PG в MySQL через Spark',
     schedule_interval=timedelta(days=1),
 ) as dag:
