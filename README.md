@@ -113,7 +113,7 @@ graph TD
 
 ### Kafka
 - **Bootstrap Servers**: `localhost:9092`
-- **Топик**: `new_users_events`
+- **Топик**: `new_user_events`
 
 ### Генерация данных
 
@@ -126,7 +126,7 @@ graph TD
 
 **Параметры генерации для Kafka по умолчанию:**
   - Интервал генерации событий: 3 секунды
-  - Топик Kafka: `new_users_events`
+  - Топик Kafka: `new_user_events`
   - События генерируются в формате JSON с полями: `first_name`, `last_name`, `email`, `phone`, `registration_date`, `loyalty_status`.
 
 ## Репликация данных
@@ -238,10 +238,10 @@ python_de_finals/
 │       └── spark-worker/
 ├── code/               # Исходный код
 │   ├── airflow/        # DAG и скрипты для Airflow
-│   │   ├── dags/       # DAG
-│   │   └── scripts/    # Скрипты, используемые в DAG
-│   │       ├── helpers/        # Вспомогательные модули
-│   │       └── pyspark_scripts/ # Скрипты PySpark
+│   │   ├── dags/       
+│   │   └── scripts/    
+│   │       ├── helpers/        
+│   │       └── pyspark_scripts/ 
 │   ├── datagen/        # Генераторы данных
 │   │   ├── pg_datagen/ # Скрипты для генерации данных в PG
 │   │   └── kafka_datagen/ # Скрипты для генерации данных в Kafka
