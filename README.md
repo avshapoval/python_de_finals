@@ -80,7 +80,7 @@ graph TD
         SM -->|service_healthy| AI
         KF -->|service_healthy| AI
         PGDG -->|service_completed_successfully| AI
-        KDG -->|service_completed_successfully| AI
+        KI -->|service_completed_successfully| AI
         AI -->|service_completed_successfully| AS
         AI -->|service_completed_successfully| AW
     end
